@@ -8,3 +8,9 @@ Resources:
       Tags:
        - Key: Name
          Value: zmyVpc
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: zmyInternetGateway         
