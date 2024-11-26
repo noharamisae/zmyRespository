@@ -1,0 +1,298 @@
+# AWSTemplateFormatVersion: 2010-09-09
+# Description: |
+    
+Parameters:
+  author:
+    Description: please input your name
+    Type: String
+    Default: zmy-1108
+
+  envetype:
+    Description: please select your  envetype
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+  keypair:
+    Description: please select you keypair 
+    Type: AWS::EC2::KeyPair::KeyName
+# Metadata:
+    
+# Mappings:
+    
+Conditions:
+  ngwCreate: !Equals [!Ref envetype, prod]
+
+
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: !Sub ${author}zmy-vpc-01
+    
+
+  MyPubSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "ap-northeast-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub ${author}zmy-pub-Subnet-01
+
+  MyPriSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: "ap-northeast-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub ${author}zmy-pri-Subnet-02
+
+  MyPubSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: "ap-northeast-1c"
+      Tags:
+        - Key: Name
+          Value: !Sub ${author}zmy-pub-Subnet-03       
+
+  MyPriSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: "ap-northeast-1c"
+      Tags:
+        - Key: Name
+          Value: !Sub ${author}zmy-pri-Subnet-04                 
+
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${author}zmy-igw01
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: myVPC
+      InternetGatewayId:
+        Ref: myInternetGateway     
+
+  myPubRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: myVPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${author}zmy-pub-rtb01           
+
+  myPriRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: myVPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${author}zmy-pri-rtb01    
+
+  myPriRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: myVPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${author}zmy-pri-rtb02    
+
+  myPubSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: MyPubSubnet1
+      RouteTableId:
+        Ref: myPubRouteTable
+
+  myPubSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: MyPubSubnet3
+      RouteTableId:
+        Ref: myPubRouteTable
+
+  myPriSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: MyPriSubnet2
+      RouteTableId:
+        Ref: myPriRouteTable01       
+
+  myPriSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: MyPriSubnet4
+      RouteTableId:
+        Ref: myPriRouteTable02           
+
+  myRoute:
+    Type: AWS::EC2::Route
+    # DependsOn: GatewayToInternet
+    Properties:
+       RouteTableId:
+         Ref: myPubRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: myInternetGateway  
+
+  NATGateway:
+    Condition: ngwCreate
+    Type: AWS::EC2::NatGateway
+    Properties:
+        AllocationId: !GetAtt NATGatewayEIP.AllocationId
+        SubnetId: !Ref MyPubSubnet1
+        Tags:
+        - Key: name
+          Value: zmy-nat-gateway-1
+  NATGatewayEIP:
+    Condition: ngwCreate
+    Type: AWS::EC2::EIP
+    Properties:
+        Domain: vpc
+  RouteNATGateway:
+    Condition: ngwCreate
+    Type: AWS::EC2::Route
+    Properties:
+        RouteTableId: !Ref myPriRouteTable01
+        DestinationCidrBlock: '0.0.0.0/0'
+        NatGatewayId: !Ref NATGateway
+
+  # BastionSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub ${author}zmy-bas-sg        
+  #     GroupDescription: for bastion server
+  #     VpcId: !Ref myVPC
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         FromPort: 22
+  #         ToPort: 22
+  #         CidrIp: 0.0.0.0/0
+  #     SecurityGroupEgress:
+  #       - IpProtocol: -1
+  #         FromPort: -1
+  #         ToPort: -1
+  #         CidrIp: 0.0.0.0/0
+
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${author}zmy-web-sg     
+      GroupDescription: for bastion server
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          # CidrIp: 0.0.0.0/0     
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0      
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: for alb
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0      
+       
+
+  # BastionEc2Instance: 
+  #   Type: AWS::EC2::Instance
+  #   Properties: 
+  #     InstanceType: t2.micro    
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub ${author}zmy-bas-server       
+  #     ImageId: ami-08ce76bae392de7dc
+  #     KeyName: 
+  #       Ref: keypair
+  #     NetworkInterfaces: 
+  #       - AssociatePublicIpAddress: "true"
+  #         DeviceIndex: "0"
+  #         GroupSet: 
+  #           - Ref: BastionSecurityGroup
+  #         SubnetId: 
+  #           Ref: MyPubSubnet1      
+
+  WebEc2Instance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      InstanceType: t2.micro    
+      Tags:
+        - Key: Name
+          Value: !Sub ${author}zmy-ec2-web-server       
+      ImageId: ami-08ce76bae392de7dc
+      KeyName: 
+        Ref: keypair
+      # NetworkInterfaces: 
+      #   - AssociatePublicIpAddress: "true"
+      #     DeviceIndex: "0"
+      SecurityGroupIds: 
+        - Ref: WebSecurityGroup
+      SubnetId: 
+        Ref: MyPriSubnet2                  
+      UserData:
+        Fn::Base64:  |
+          #!/bin/bash
+          # Use this for your user data (script from top to bottom)
+          # install httpd (Linux 2 version)
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "Mobile 1a Server!" > /var/www/html/index.html
+            
+            
+# Transform:
+    
+    
+# Outputs:
